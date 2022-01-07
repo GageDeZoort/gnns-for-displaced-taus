@@ -18,6 +18,8 @@ from particle import Particle
 from particle.pdgid import is_meson
 
 def parse_args():
+    """ parse the command line
+    """
     parser = argparse.ArgumentParser()
     add_arg = parser.add_argument
     add_arg('-i', '--infile', type=str, default='../skims/data.p')
@@ -25,46 +27,60 @@ def parse_args():
     add_arg('-v', '--verbose', action='store_true')
     add_arg('-n', '--n-workers', type=int, default=1)
     add_arg('--n-events', type=int, default=10**5)
-    return parser.parse_args()
+    add_arg('--eps', type=int, default=2)
+    add_arg('--ecal-min', type=float, default=0.05)
+    add_arg('--hcal-min', type=float, default=0.05)
+    add_arg('--tau-pt-min', type=float, default=15)
+    return vars(parser.parse_args()) # return as dictionary
 
 def calc_dphi(phi1, phi2):
-    """Computes phi2-phi1 given in range [-pi,pi]"""
+    """ computes phi2-phi1 given in range [-pi,pi]
+    """
     dphi = phi2 - phi1
     dphi[dphi > np.pi] -= 2*np.pi
     dphi[dphi < -np.pi] += 2*np.pi
     return dphi
 
 def calc_eta(r, z):
-    """Computes pseudorapidity
-       (https://en.wikipedia.org/wiki/Pseudorapidity)
+    """ computes pseudorapidity given polar angle theta
     """
     theta = np.arctan2(r, z)
     return -1. * np.log(np.tan(theta / 2.))
 
 def zero_div(a,b):
+    """ divide, potentially by zero
+    """
     if b==0: return 0
     return a/b
 
-def filter_gen_arrays(data, pt_min=10, ecal_min=0.05, hcal_min=0.05):
+def filter_gen_arrays(data, args={}):
+    """ shape gen arrays into convenient dictionary,
+        add relevant quantities
+    """
+    # grab arguments parsed from command line
+    pt_min = args['tau_pt_min']
+    ecal_min = args['ecal_min'] # hit energy thresholds
+    hcal_min = args['hcal_min'] # 
+
+    # mask to select the single gen tau in each event
     tau_mask = (abs(data['gen_ID'])==15)
+
+    # filter the events based on the tau pt
     pt_filter = ak.flatten(data['gen_pt'][tau_mask] > pt_min)
     data = data[pt_filter]
     tau_mask = tau_mask[pt_filter]
+
+    # mask to select visible and invisible systems
     pdgID = data['gen_ID']
-    
-    # masks for visible and invisible systems
-    lepton_mask = ((abs(pdgID)==11) | # ele 
-                   (abs(pdgID)==13))  # mu
-    hadron_mask = ((abs(pdgID)==111) | # pi0
-                   (abs(pdgID)==211) | # pi+
-                   (abs(pdgID)==311) | # K0
-                   (abs(pdgID)==321) | # K+
-                   (abs(pdgID)==130) | # K0S
-                   (abs(pdgID)==310))  # K0L
-    vis_mask = hadron_mask
-    neutrino_mask = ((abs(pdgID)==12) | # nu_e
-                     (abs(pdgID)==14) | # nu_mu
-                     (abs(pdgID)==16))  # nu_tau
+    vis_mask = ((abs(pdgID)==111) | # pi0
+                (abs(pdgID)==211) | # pi+
+                (abs(pdgID)==311) | # K0
+                (abs(pdgID)==321) | # K+
+                (abs(pdgID)==130) | # K0S
+                (abs(pdgID)==310))  # K0L
+    inv_mask = ((abs(pdgID)==12) |  # nu_e
+                (abs(pdgID)==14) |  # nu_mu
+                (abs(pdgID)==16))   # nu_tau
 
     tau = {'pt': data['gen_pt'][tau_mask][:,0],
            'eta': data['gen_eta'][tau_mask][:,0],
@@ -73,6 +89,7 @@ def filter_gen_arrays(data, pt_min=10, ecal_min=0.05, hcal_min=0.05):
            'energy': data['gen_energy'][tau_mask][:,0],
            'vxy': data['gen_vxy'][tau_mask][:,0],
            'vz': data['gen_vz'][tau_mask][:,0]}
+
     vis = {'ID': data['gen_ID'][vis_mask],
            'pt': data['gen_pt'][vis_mask],
            'eta': data['gen_eta'][vis_mask],
@@ -81,19 +98,22 @@ def filter_gen_arrays(data, pt_min=10, ecal_min=0.05, hcal_min=0.05):
            'energy': data['gen_energy'][vis_mask],
            'vxy': data['gen_vxy'][vis_mask],
            'vz': data['gen_vz'][vis_mask]}
-    inv = {'pt': data['gen_pt'][neutrino_mask],
-           'eta': data['gen_eta'][neutrino_mask],
-           'phi': data['gen_phi'][neutrino_mask],
-           'mass': data['gen_mass'][neutrino_mask],
-           'energy': data['gen_energy'][neutrino_mask],
-           'vxy': data['gen_vxy'][neutrino_mask],
-           'vz': data['gen_vz'][neutrino_mask]}
     
-    # raw sim_hit quantities
+    inv = {'pt': data['gen_pt'][inv_mask],
+           'eta': data['gen_eta'][inv_mask],
+           'phi': data['gen_phi'][inv_mask],
+           'mass': data['gen_mass'][inv_mask],
+           'energy': data['gen_energy'][inv_mask],
+           'vxy': data['gen_vxy'][inv_mask],
+           'vz': data['gen_vz'][inv_mask]}
+    
+    # filter sim hits below min energy in each subdetector 
     ee_mask = (data['sim_hits_ee_energy'] > ecal_min)
     eb_mask = (data['sim_hits_eb_energy'] > ecal_min)
     es_mask = (data['sim_hits_es_energy'] > ecal_min)
     #hcal_mask = (data['sim_hits_hcal_energy'] > hcal_min)
+
+    # group simhit quantities by subdetector
     sim_hits =  {'ee': {'detid': data['sim_hits_ee_detid'][ee_mask], 
                         'energy': data['sim_hits_ee_energy'][ee_mask],
                         'ix': data['sim_hits_ee_ix'][ee_mask],
@@ -132,13 +152,22 @@ def filter_gen_arrays(data, pt_min=10, ecal_min=0.05, hcal_min=0.05):
    
     return {'tau': tau, 'vis': vis, 'inv': inv, 'sim_hits': sim_hits}
 
-def filter_reco_arrays(data, ecal_min=0.05, hcal_min = 0.05):
+def filter_reco_arrays(data, args={}):
+    """ shape reco arrays into convenient dictionary,
+        add additional quantities
+    """
+    
+    ecal_min = args['ecal_min']
+    hcal_min = args['hcal_min']
+    
+    # filter rec_hits below a given energy in each subdetector
     ee_mask = (data['rec_hits_ee_energy'] > ecal_min)
     eb_mask = (data['rec_hits_eb_energy'] > ecal_min)
     es_mask = (data['rec_hits_es_energy'] > ecal_min)
     hbhe_mask = (data['rec_hits_hbhe_energy'] > hcal_min)
     hf_mask = (data['rec_hits_hf_energy'] > hcal_min)
     ho_mask = (data['rec_hits_ho_energy'] > hcal_min)
+
     rec_hits = {'ee': {'detid': data['rec_hits_ee_detid'][ee_mask], 
                        'energy': data['rec_hits_ee_energy'][ee_mask],
                        'ix': data['rec_hits_ee_ix'][ee_mask],
@@ -194,7 +223,6 @@ def filter_reco_arrays(data, ecal_min=0.05, hcal_min = 0.05):
                        'eta': data['rec_hits_ho_eta'][ho_mask],
                        'phi': data['rec_hits_ho_phi'][ho_mask],
                        'time': data['rec_hits_ho_time'][ho_mask]
-
                       },
            }
     
@@ -224,7 +252,6 @@ def debug_event(i, sim, rec, vis, zoom_rec=False):
     rec_iphi = rec['eb']['iphi'][i]
     rec_energy = rec['eb']['energy'][i]
     vis_ID = vis['ID'][i]
-    print(vis_ID)
     vis_eta = vis['eta'][i]
     vis_phi = vis['phi'][i]
     vis_ieta = [0]*len(vis_eta)
@@ -256,7 +283,15 @@ def debug_event(i, sim, rec, vis, zoom_rec=False):
         axs[1].set_ylim(ylim)
     plt.show()
 
-def truth_match_hits(e, sim, rec):
+def phi_neighbors(iphi_1, iphi_2, eps=2):
+    """ decide if hits are neighbors in binned phi space
+        while accounting for the "wrap-around" (branch cut) at 2pi
+    """
+    diff = abs(iphi_1 - iphi_2)
+    return ((diff<=eps) | ((360-diff)<=eps)) 
+
+def truth_match_hits(e, sim, rec, eps=2):
+    # store summary statistics for subsequent analysis
     stats = {'total_sim_hits':  0,
              'matched_sim_hits': 0,
              'total_rec_hits': 0,
@@ -291,6 +326,11 @@ def truth_match_hits(e, sim, rec):
                                'energy': sim[sd]['energy'][e],
                                'temp': np.ones(n_sim),
                               })
+        
+        # note that duplicate sim hits have different energies
+        # to handle them, group by ID and sum energy:
+        # same_ID_energies = df_sim[['ID', 'energy']].groupby(['ID'])
+        # energy_sums = same_ID_energies.agg('sum')
         df_sim = df_sim.drop_duplicates('ID', keep='first')
         stats['total_sim_hits'] += len(df_sim)
         
@@ -300,8 +340,8 @@ def truth_match_hits(e, sim, rec):
         df['subdetector'] = sd
         
         # matching definition: within 2 ix/iy units from a simhit
-        df['matched'] = ((abs(df['ix_rec'] - df['ix_sim']) < 3) &
-                         (abs(df['iy_rec'] - df['iy_sim']) < 3))
+        df['matched'] = ((abs(df['ix_rec'] - df['ix_sim']) <= eps) &
+                         (phi_neighbors(df['iy_rec'], df['iy_sim'], eps=eps)))
         
         # keep relevant columns, add to whole-event dataframe
         keep_cols = ['ix_rec', 'iy_rec', 'x_rec', 'y_rec', 'z_rec',
@@ -320,14 +360,13 @@ def truth_match_hits(e, sim, rec):
                                            stats['total_rec_hits'])
 
     event = pd.concat(df_list)
-    
     return event, pd.DataFrame(stats, index=[0])
 
 def process_event(e, args={}, 
                   gen=ak.Array([]), reco=ak.Array([])):
     
-    
-    event, stats = truth_match_hits(e, gen['sim_hits'], reco['rec_hits']) 
+    event, stats = truth_match_hits(e, gen['sim_hits'], 
+                                    reco['rec_hits'], eps=args['eps']) 
     logging.debug(f'Event {e} returned:\n {stats}')
     if not (e%10): logging.info(f'Processed event {e}') 
     return stats
@@ -339,25 +378,26 @@ def main():
 
     # setup logging
     log_format = '%(asctime)s %(levelname)s %(message)s'
-    log_level = logging.DEBUG if args.verbose else logging.INFO
+    log_level = logging.DEBUG if args['verbose'] else logging.INFO
     logging.basicConfig(level=log_level, format=log_format)
     logging.info('Initializing')
     
     # load skim file 
-    with open(args.infile, 'rb') as handle:
+    infile = args['infile']
+    with open(infile, 'rb') as handle:
         data = pickle.load(handle)
-        logging.info(f'Loaded {args.infile}')
+        logging.info(f"Loaded {infile}")
 
     # filter out arrays of interest
-    gen = filter_gen_arrays(data['gen_arrays'])
-    reco = filter_reco_arrays(data['reco_arrays'])
+    gen = filter_gen_arrays(data['gen_arrays'], args=args)
+    reco = filter_reco_arrays(data['reco_arrays'], args=args)
      
     # process taus with a worker pool
     nevts = len(gen['tau']['pt'])
-    if args.n_events < nevts: nevts = args.n_events
+    if args['n_events'] < nevts: nevts = args['n_events']
     evtids = np.arange(nevts)
     print(evtids)
-    with mp.Pool(processes=args.n_workers) as pool:
+    with mp.Pool(processes=args['n_workers']) as pool:
         process_func = partial(process_event, args=args,
                                gen=gen, reco=reco)
         output = pool.map(process_func, evtids)
@@ -366,7 +406,7 @@ def main():
     # total_sim_hits  matched_sim_hits sim_match_fraction  
     logging.info('All done!')
     stats = pd.concat(output)
-    outfile = args.infile.split('.p')[0].split('/')[-1] + '.csv'
+    outfile = infile.split('.p')[0].split('/')[-1] + '.csv'
     outfile = 'stats/'+outfile
     logging.info(f'Saving summary stats to {outfile}')
     stats.to_csv(outfile, index=False)
