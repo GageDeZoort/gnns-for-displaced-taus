@@ -55,7 +55,9 @@ def get_arrays(path):
                  'rec_hits_hf_rho', 'rec_hits_hf_eta', 'rec_hits_hf_phi', 
                  'rec_hits_ho_detid', 'rec_hits_ho_energy', 
                  'rec_hits_ho_ieta', 'rec_hits_ho_iphi', 'rec_hits_ho_time',
-                 'rec_hits_ho_rho', 'rec_hits_ho_eta', 'rec_hits_ho_phi']
+                 'rec_hits_ho_rho', 'rec_hits_ho_eta', 'rec_hits_ho_phi',
+                 'reco_PF_n_jets', 'reco_PF_jet_pt', 'reco_PF_jet_eta', 
+                 'reco_PF_jet_phi']
     gen_keys = ['gen_ID', 'gen_pt', 'gen_eta', 'gen_phi', 'gen_mass', 
                 'gen_energy', 'gen_vxy', 'gen_vz']
     sim_keys = ['sim_hits_ee_detid', 'sim_hits_ee_energy',

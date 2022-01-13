@@ -6,6 +6,7 @@ import pickle
 import argparse
 import multiprocessing as mp
 from functools import partial
+from datetime import datetime
 
 # externals 
 import awkward as ak
@@ -31,6 +32,7 @@ def parse_args():
     add_arg('--ecal-min', type=float, default=0.05)
     add_arg('--hcal-min', type=float, default=0.05)
     add_arg('--tau-pt-min', type=float, default=15)
+    add_arg('--task', type=int, default=0)
     return vars(parser.parse_args()) # return as dictionary
 
 def calc_dphi(phi1, phi2):
@@ -121,7 +123,7 @@ def filter_gen_arrays(data, args={}):
                         'rho': data['sim_hits_ee_rho'][ee_mask],
                         'eta': data['sim_hits_ee_eta'][ee_mask],
                         'phi': data['sim_hits_ee_phi'][ee_mask],
-                        'time': data['sim_hits_ee_time'][ee_mask]
+                        #'time': data['sim_hits_ee_time'][ee_mask]
                        },
                  'eb': {'detid': data['sim_hits_eb_detid'][eb_mask],
                         'energy': data['sim_hits_eb_energy'][eb_mask],
@@ -130,7 +132,7 @@ def filter_gen_arrays(data, args={}):
                         'rho': data['sim_hits_eb_rho'][eb_mask],
                         'eta': data['sim_hits_eb_eta'][eb_mask],
                         'phi': data['sim_hits_eb_phi'][eb_mask],
-                        'time': data['sim_hits_eb_time'][eb_mask]
+                        #'time': data['sim_hits_eb_time'][eb_mask]
                        },
                  'es': {'detid': data['sim_hits_es_detid'][es_mask],
                         'energy': data['sim_hits_es_energy'][es_mask],
@@ -139,7 +141,7 @@ def filter_gen_arrays(data, args={}):
                         'rho': data['sim_hits_es_rho'][es_mask],
                         'eta': data['sim_hits_es_eta'][es_mask],
                         'phi': data['sim_hits_es_phi'][es_mask],
-                        'time': data['sim_hits_es_time'][es_mask]
+                        #'time': data['sim_hits_es_time'][es_mask]
                        }
                 }
     
@@ -175,7 +177,7 @@ def filter_reco_arrays(data, args={}):
                        'rho': data['rec_hits_ee_rho'][ee_mask],
                        'eta': data['rec_hits_ee_eta'][ee_mask],
                        'phi': data['rec_hits_ee_phi'][ee_mask],
-                       'time': data['rec_hits_ee_time'][ee_mask]
+                       #'time': data['rec_hits_ee_time'][ee_mask]
                       },
                 'eb': {'detid': data['rec_hits_eb_detid'][eb_mask],
                        'energy': data['rec_hits_eb_energy'][eb_mask],
@@ -184,7 +186,7 @@ def filter_reco_arrays(data, args={}):
                        'rho': data['rec_hits_eb_rho'][eb_mask],
                        'eta': data['rec_hits_eb_eta'][eb_mask],
                        'phi': data['rec_hits_eb_phi'][eb_mask],
-                       'time': data['rec_hits_eb_time'][eb_mask]
+                       #'time': data['rec_hits_eb_time'][eb_mask]
                       },
                 'es': {'detid': data['rec_hits_es_detid'][es_mask],
                        'energy': data['rec_hits_es_energy'][es_mask],
@@ -193,7 +195,7 @@ def filter_reco_arrays(data, args={}):
                        'rho': data['rec_hits_es_rho'][es_mask],
                        'eta': data['rec_hits_es_eta'][es_mask],
                        'phi': data['rec_hits_es_phi'][es_mask],
-                       'time': data['rec_hits_es_time'][es_mask]
+                       #'time': data['rec_hits_es_time'][es_mask]
                       },
                 'hbhe': {'detid': data['rec_hits_hbhe_detid'][hbhe_mask],
                          'energy': data['rec_hits_hbhe_energy'][hbhe_mask],
@@ -202,7 +204,7 @@ def filter_reco_arrays(data, args={}):
                          'rho': data['rec_hits_hbhe_rho'][hbhe_mask],
                          'eta': data['rec_hits_hbhe_eta'][hbhe_mask],
                          'phi': data['rec_hits_hbhe_phi'][hbhe_mask],
-                         'time': data['rec_hits_hbhe_time'][hbhe_mask]
+                         #'time': data['rec_hits_hbhe_time'][hbhe_mask]
 
                         },
                 'hf': {'detid': data['rec_hits_hf_detid'][hf_mask],
@@ -212,7 +214,7 @@ def filter_reco_arrays(data, args={}):
                        'rho': data['rec_hits_hf_rho'][hf_mask],
                        'eta': data['rec_hits_hf_eta'][hf_mask],
                        'phi': data['rec_hits_hf_phi'][hf_mask],
-                       'time': data['rec_hits_hf_time'][hf_mask]
+                       #'time': data['rec_hits_hf_time'][hf_mask]
 
                       },
                 'ho': {'detid': data['rec_hits_ho_detid'][ho_mask],
@@ -222,9 +224,14 @@ def filter_reco_arrays(data, args={}):
                        'rho': data['rec_hits_ho_rho'][ho_mask],
                        'eta': data['rec_hits_ho_eta'][ho_mask],
                        'phi': data['rec_hits_ho_phi'][ho_mask],
-                       'time': data['rec_hits_ho_time'][ho_mask]
+                       #'time': data['rec_hits_ho_time'][ho_mask]
                       },
            }
+    
+    jets = {'n': data['reco_PF_n_jets'],
+            'pt': data['reco_PF_jet_pt'],
+            'eta': data['reco_PF_jet_eta'],
+            'phi': data['reco_PF_jet_phi']}
     
     # derived rec_hit quantities
     for sd in rec_hits.keys():
@@ -233,7 +240,7 @@ def filter_reco_arrays(data, args={}):
         rec_hits[sd]['z'] = (rec_hits[sd]['rho'] / 
                              np.tan(2*np.arctan(np.exp(-1*rec_hits[sd]['eta']))))
         
-    return {'rec_hits': rec_hits}
+    return {'rec_hits': rec_hits, 'jets': jets}
 
 def debug_event(i, sim, rec, vis, zoom_rec=False):
     print('simhits in ee:', len(sim['ee']['detid'][i]))
@@ -299,7 +306,7 @@ def truth_match_hits(e, sim, rec, eps=2):
     
     # loop over subdetectors, build dataframe in each
     df_list = []
-    for sd in sim.keys(): 
+    for s, sd in enumerate(sim.keys()): 
         
         # grab binned coordinates for the subdetector
         ix = 'ix' if 'ix' in sim[sd].keys() else 'ieta'
@@ -338,6 +345,7 @@ def truth_match_hits(e, sim, rec, eps=2):
         df = df_rec.reset_index().merge(df_sim.reset_index(), 
                                         on='temp', suffixes=('_rec', '_sim'))
         df['subdetector'] = sd
+        df['subdetector_label'] = s
         
         # matching definition: within 2 ix/iy units from a simhit
         df['matched'] = ((abs(df['ix_rec'] - df['ix_sim']) <= eps) &
@@ -345,9 +353,11 @@ def truth_match_hits(e, sim, rec, eps=2):
         
         # keep relevant columns, add to whole-event dataframe
         keep_cols = ['ix_rec', 'iy_rec', 'x_rec', 'y_rec', 'z_rec',
-                     'energy_rec', 'subdetector', 'matched']
+                     'energy_rec', 'subdetector', 'subdetector_label', 
+                     'matched']
         df_list.append(df.drop_duplicates('ID_rec', keep='first')[keep_cols])
         
+
         # determine which hits were matched
         mask = (df['matched']==True)
         if (np.sum(mask)==0): continue
@@ -362,15 +372,40 @@ def truth_match_hits(e, sim, rec, eps=2):
     event = pd.concat(df_list)
     return event, pd.DataFrame(stats, index=[0])
 
-def process_event(e, args={}, 
+
+def select_hits(event, args):
+    if (args['task']==0):
+        x = event[['x_rec', 'y_rec', 'z_rec',
+                   'energy_rec']][(event.matched==True)]
+    return x
+
+def select_target(event, args):
+    if (args['task']==0):
+        y = args['decay_mode']
+
+    return y
+
+def process_event(e, args={},
                   gen=ak.Array([]), reco=ak.Array([])):
     
     event, stats = truth_match_hits(e, gen['sim_hits'], 
                                     reco['rec_hits'], eps=args['eps']) 
+    event = event[['ix_rec', 'iy_rec', 'x_rec', 'y_rec', 'z_rec',
+                   'energy_rec', 'subdetector_label', 'matched']]
+    x = select_hits(event, args)
+    y = select_target(event, args)
+    #edge_index, edge_attr = build_edges(x)
+    data = Data(x=x, y=y)
+    outdir = os.path.join(args['outdir'], f"task_{args['task']}")
+    outdir = os.path.join(outdir, args['name'])
+    outfile = os.path.join(f"event{e}.npy")
+    if (args['verbose'] or (e%10)): 
+        logging.info(f"Writing to {outfile}")
+    np.save(data, outfile)
+
     logging.debug(f'Event {e} returned:\n {stats}')
     if not (e%10): logging.info(f'Processed event {e}') 
-    return stats
-
+    return {'data': data, 'stats': stats}
 
 def main():
     # parse the command line
@@ -381,22 +416,41 @@ def main():
     log_level = logging.DEBUG if args['verbose'] else logging.INFO
     logging.basicConfig(level=log_level, format=log_format)
     logging.info('Initializing')
+
+    # determine graph construction task
+    task_strs = {0: '(Task 0) Storing only rechits matched to simhits.',
+                 1: '(Task 1) Storing only rechits matched to simhits.',
+                 2: '(Task 2) Storing rechits matched to PF jets.',
+                 3: '(Task 3) Storing rechits clustered by <strategy>.',
+                 } 
+    logging.info(task_strs[args['task']])
     
     # load skim file 
     infile = args['infile']
+    infile_name = infile.split('/')[-1].split('.')[0]
     with open(infile, 'rb') as handle:
         data = pickle.load(handle)
         logging.info(f"Loaded {infile}")
 
+    decay_modes = {'OneProngNoPi0': 0,
+                   'OneProngOnePi0': 1,
+                   'OneProngTwoPi0': 2,
+                   'ThreeProngsNoPi0': 3,
+                   'ThreeProngsOnePi0': 4}
+    decay_mode = decay_modes[infile_name]
+    args['decay_mode'] = decay_mode
+    args['name'] = infile_name
+
     # filter out arrays of interest
     gen = filter_gen_arrays(data['gen_arrays'], args=args)
     reco = filter_reco_arrays(data['reco_arrays'], args=args)
+    jets = reco['jets']
      
     # process taus with a worker pool
     nevts = len(gen['tau']['pt'])
     if args['n_events'] < nevts: nevts = args['n_events']
     evtids = np.arange(nevts)
-    print(evtids)
+
     with mp.Pool(processes=args['n_workers']) as pool:
         process_func = partial(process_event, args=args,
                                gen=gen, reco=reco)
@@ -405,7 +459,7 @@ def main():
     # analyze output statistics
     # total_sim_hits  matched_sim_hits sim_match_fraction  
     logging.info('All done!')
-    stats = pd.concat(output)
+    stats = pd.concat([out['stats'] for out in output])
     outfile = infile.split('.p')[0].split('/')[-1] + '.csv'
     outfile = 'stats/'+outfile
     logging.info(f'Saving summary stats to {outfile}')
