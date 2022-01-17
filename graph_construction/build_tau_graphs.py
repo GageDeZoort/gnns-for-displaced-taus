@@ -9,6 +9,7 @@ from functools import partial
 from datetime import datetime
 
 # externals 
+import torch
 import awkward as ak
 import pandas as pd
 import numpy as np
@@ -24,14 +25,14 @@ def parse_args():
     parser = argparse.ArgumentParser()
     add_arg = parser.add_argument
     add_arg('-i', '--infile', type=str, default='../skims/data.p')
-    add_arg('-o', '--outdir', type=str, default='../tau_graphs')
+    add_arg('-o', '--outdir', type=str, default='../graphs')
     add_arg('-v', '--verbose', action='store_true')
     add_arg('-n', '--n-workers', type=int, default=1)
     add_arg('--n-events', type=int, default=10**5)
     add_arg('--eps', type=int, default=2)
-    add_arg('--ecal-min', type=float, default=0.05)
-    add_arg('--hcal-min', type=float, default=0.05)
-    add_arg('--tau-pt-min', type=float, default=15)
+    add_arg('--ecal-min', type=float, default=0.0)
+    add_arg('--hcal-min', type=float, default=0.0)
+    add_arg('--tau-pt-min', type=float, default=0)
     add_arg('--task', type=int, default=0)
     return vars(parser.parse_args()) # return as dictionary
 
@@ -52,7 +53,7 @@ def calc_eta(r, z):
 def zero_div(a,b):
     """ divide, potentially by zero
     """
-    if b==0: return 0
+    if (b<1e-9): return 0
     return a/b
 
 def filter_gen_arrays(data, args={}):
@@ -60,18 +61,12 @@ def filter_gen_arrays(data, args={}):
         add relevant quantities
     """
     # grab arguments parsed from command line
-    pt_min = args['tau_pt_min']
     ecal_min = args['ecal_min'] # hit energy thresholds
     hcal_min = args['hcal_min'] # 
 
-    # mask to select the single gen tau in each event
+    # mask to select the tau in the event
     tau_mask = (abs(data['gen_ID'])==15)
-
-    # filter the events based on the tau pt
-    pt_filter = ak.flatten(data['gen_pt'][tau_mask] > pt_min)
-    data = data[pt_filter]
-    tau_mask = tau_mask[pt_filter]
-
+            
     # mask to select visible and invisible systems
     pdgID = data['gen_ID']
     vis_mask = ((abs(pdgID)==111) | # pi0
@@ -120,37 +115,37 @@ def filter_gen_arrays(data, args={}):
                         'energy': data['sim_hits_ee_energy'][ee_mask],
                         'ix': data['sim_hits_ee_ix'][ee_mask],
                         'iy': data['sim_hits_ee_iy'][ee_mask],
-                        'rho': data['sim_hits_ee_rho'][ee_mask],
-                        'eta': data['sim_hits_ee_eta'][ee_mask],
-                        'phi': data['sim_hits_ee_phi'][ee_mask],
+                        #'rho': data['sim_hits_ee_rho'][ee_mask],
+                        #'eta': data['sim_hits_ee_eta'][ee_mask],
+                        #'phi': data['sim_hits_ee_phi'][ee_mask],
                         #'time': data['sim_hits_ee_time'][ee_mask]
                        },
                  'eb': {'detid': data['sim_hits_eb_detid'][eb_mask],
                         'energy': data['sim_hits_eb_energy'][eb_mask],
                         'ieta': data['sim_hits_eb_ieta'][eb_mask],
                         'iphi': data['sim_hits_eb_iphi'][eb_mask],
-                        'rho': data['sim_hits_eb_rho'][eb_mask],
-                        'eta': data['sim_hits_eb_eta'][eb_mask],
-                        'phi': data['sim_hits_eb_phi'][eb_mask],
+                        #'rho': data['sim_hits_eb_rho'][eb_mask],
+                        #'eta': data['sim_hits_eb_eta'][eb_mask],
+                        #'phi': data['sim_hits_eb_phi'][eb_mask],
                         #'time': data['sim_hits_eb_time'][eb_mask]
                        },
                  'es': {'detid': data['sim_hits_es_detid'][es_mask],
                         'energy': data['sim_hits_es_energy'][es_mask],
                         'six': data['sim_hits_es_six'][es_mask],
                         'siy': data['sim_hits_es_siy'][es_mask],
-                        'rho': data['sim_hits_es_rho'][es_mask],
-                        'eta': data['sim_hits_es_eta'][es_mask],
-                        'phi': data['sim_hits_es_phi'][es_mask],
+                        #'rho': data['sim_hits_es_rho'][es_mask],
+                        #'eta': data['sim_hits_es_eta'][es_mask],
+                        #'phi': data['sim_hits_es_phi'][es_mask],
                         #'time': data['sim_hits_es_time'][es_mask]
                        }
                 }
     
     # derived sim_hit quantities
-    for sd in sim_hits.keys():
-        sim_hits[sd]['x'] = sim_hits[sd]['rho'] * np.cos(sim_hits[sd]['phi'])
-        sim_hits[sd]['y'] = sim_hits[sd]['rho'] * np.sin(sim_hits[sd]['phi'])
-        sim_hits[sd]['z'] = (sim_hits[sd]['rho'] / 
-                             np.tan(2*np.arctan(np.exp(-1*sim_hits[sd]['eta']))))
+    #for sd in sim_hits.keys():
+    #    sim_hits[sd]['x'] = sim_hits[sd]['rho'] * np.cos(sim_hits[sd]['phi'])
+    #    sim_hits[sd]['y'] = sim_hits[sd]['rho'] * np.sin(sim_hits[sd]['phi'])
+    #    sim_hits[sd]['z'] = (sim_hits[sd]['rho'] / 
+    #                         np.tan(2*np.arctan(np.exp(-1*sim_hits[sd]['eta']))))
    
     return {'tau': tau, 'vis': vis, 'inv': inv, 'sim_hits': sim_hits}
 
@@ -295,7 +290,7 @@ def phi_neighbors(iphi_1, iphi_2, eps=2):
         while accounting for the "wrap-around" (branch cut) at 2pi
     """
     diff = abs(iphi_1 - iphi_2)
-    return ((diff<=eps) | ((360-diff)<=eps)) 
+    return ((diff<(eps+1)) | ((360-diff)<(eps+1))) 
 
 def truth_match_hits(e, sim, rec, eps=2):
     # store summary statistics for subsequent analysis
@@ -327,9 +322,8 @@ def truth_match_hits(e, sim, rec, eps=2):
         
         # build dataframe for sim hits
         n_sim = len(sim[sd]['detid'][e])
-        df_sim = pd.DataFrame({'x': sim[sd]['x'][e], 'ix': sim[sd][ix][e],
-                               'y': sim[sd]['y'][e], 'iy': sim[sd][iy][e],
-                               'z': sim[sd]['z'][e], 'ID': sim[sd]['detid'][e],
+        df_sim = pd.DataFrame({'ix': sim[sd][ix][e], 'iy': sim[sd][iy][e],
+                               'ID': sim[sd]['detid'][e],
                                'energy': sim[sd]['energy'][e],
                                'temp': np.ones(n_sim),
                               })
@@ -341,6 +335,11 @@ def truth_match_hits(e, sim, rec, eps=2):
         df_sim = df_sim.drop_duplicates('ID', keep='first')
         stats['total_sim_hits'] += len(df_sim)
         
+        # dummy xyz coordinates to merge with rec hits
+        df_sim['x'] = 1
+        df_sim['y'] = 1
+        df_sim['z'] = 1
+        
         # form all possible sim-rec hit pairs 
         df = df_rec.reset_index().merge(df_sim.reset_index(), 
                                         on='temp', suffixes=('_rec', '_sim'))
@@ -348,12 +347,15 @@ def truth_match_hits(e, sim, rec, eps=2):
         df['subdetector_label'] = s
         
         # matching definition: within 2 ix/iy units from a simhit
-        df['matched'] = ((abs(df['ix_rec'] - df['ix_sim']) <= eps) &
+        df['matched'] = ((abs(df['ix_rec'] - df['ix_sim']) < (eps+1)) &
                          (phi_neighbors(df['iy_rec'], df['iy_sim'], eps=eps)))
         
         # keep relevant columns, add to whole-event dataframe
-        keep_cols = ['ix_rec', 'iy_rec', 'x_rec', 'y_rec', 'z_rec',
-                     'energy_rec', 'subdetector', 'subdetector_label', 
+        keep_cols = ['ix_rec', 'iy_rec', 
+                     'x_rec', 'y_rec', 'z_rec',
+                     'ix_sim', 'iy_sim',
+                     'energy_rec', 'energy_sim',
+                     'subdetector', 'subdetector_label', 
                      'matched']
         df_list.append(df.drop_duplicates('ID_rec', keep='first')[keep_cols])
         
@@ -375,8 +377,9 @@ def truth_match_hits(e, sim, rec, eps=2):
 
 def select_hits(event, args):
     if (args['task']==0):
-        x = event[['x_rec', 'y_rec', 'z_rec',
-                   'energy_rec']][(event.matched==True)]
+        x = event[['x_rec', 'y_rec', 'z_rec', 
+                   'ix_rec', 'iy_rec', 'ix_sim', 'iy_sim',
+                   'energy_rec', 'energy_sim']][(event.matched==True)]
     return x
 
 def select_target(event, args):
@@ -390,22 +393,26 @@ def process_event(e, args={},
     
     event, stats = truth_match_hits(e, gen['sim_hits'], 
                                     reco['rec_hits'], eps=args['eps']) 
-    event = event[['ix_rec', 'iy_rec', 'x_rec', 'y_rec', 'z_rec',
-                   'energy_rec', 'subdetector_label', 'matched']]
+
+    # add additional statistics
+    stats['tau_pt'] = gen['tau']['pt'][e]
+    stats['vis_pt'] = ak.sum(gen['vis']['pt'][e])
+
     x = select_hits(event, args)
     y = select_target(event, args)
     #edge_index, edge_attr = build_edges(x)
     data = Data(x=x, y=y)
     outdir = os.path.join(args['outdir'], f"task_{args['task']}")
     outdir = os.path.join(outdir, args['name'])
-    outfile = os.path.join(f"event{e}.npy")
-    if (args['verbose'] or (e%10)): 
-        logging.info(f"Writing to {outfile}")
-    np.save(data, outfile)
+    if not os.path.exists(outdir): 
+        os.makedirs(outdir)
+        logging.info(f"Created new directory: {outdir}")
+    outfile = os.path.join(outdir, f"event{e}.pt")
+    torch.save(data, outfile)
 
     logging.debug(f'Event {e} returned:\n {stats}')
     if not (e%10): logging.info(f'Processed event {e}') 
-    return {'data': data, 'stats': stats}
+    return {'stats': stats}
 
 def main():
     # parse the command line
@@ -444,6 +451,9 @@ def main():
     # filter out arrays of interest
     gen = filter_gen_arrays(data['gen_arrays'], args=args)
     reco = filter_reco_arrays(data['reco_arrays'], args=args)
+    
+            
+            
     jets = reco['jets']
      
     # process taus with a worker pool
@@ -460,8 +470,13 @@ def main():
     # total_sim_hits  matched_sim_hits sim_match_fraction  
     logging.info('All done!')
     stats = pd.concat([out['stats'] for out in output])
+    outdir = f"stats/task_{args['task']}"
+    if not os.path.exists(outdir):
+        os.makedirs(outdir)
+        logging.info(f"Created new directory: {outdir}")
+
     outfile = infile.split('.p')[0].split('/')[-1] + '.csv'
-    outfile = 'stats/'+outfile
+    outfile = os.path.join(outdir, outfile)
     logging.info(f'Saving summary stats to {outfile}')
     stats.to_csv(outfile, index=False)
     
