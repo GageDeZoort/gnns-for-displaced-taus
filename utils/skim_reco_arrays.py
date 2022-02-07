@@ -47,9 +47,12 @@ def get_arrays(path):
                  'rec_hits_es_detid', 'rec_hits_es_energy', 
                  'rec_hits_es_six', 'rec_hits_es_siy', 'rec_hits_es_time',
                  'rec_hits_es_rho', 'rec_hits_es_eta', 'rec_hits_es_phi', 
-                 'rec_hits_hbhe_detid', 'rec_hits_hbhe_energy', 
-                 'rec_hits_hbhe_ieta', 'rec_hits_hbhe_iphi', 'rec_hits_hbhe_time',
-                 'rec_hits_hbhe_rho', 'rec_hits_hbhe_eta', 'rec_hits_hbhe_phi', 
+                 'rec_hits_hb_detid', 'rec_hits_hb_energy', 
+                 'rec_hits_hb_ieta', 'rec_hits_hb_iphi', 'rec_hits_hb_time',
+                 'rec_hits_hb_rho', 'rec_hits_hb_eta', 'rec_hits_hb_phi', 
+                 'rec_hits_he_detid', 'rec_hits_he_energy',
+                 'rec_hits_he_ieta', 'rec_hits_he_iphi', 'rec_hits_he_time',
+                 'rec_hits_he_rho', 'rec_hits_he_eta', 'rec_hits_he_phi',
                  'rec_hits_hf_detid', 'rec_hits_hf_energy', 
                  'rec_hits_hf_ieta', 'rec_hits_hf_iphi', 'rec_hits_hf_time',
                  'rec_hits_hf_rho', 'rec_hits_hf_eta', 'rec_hits_hf_phi', 
@@ -68,7 +71,15 @@ def get_arrays(path):
                 'sim_hits_eb_rho', 'sim_hits_eb_eta', 'sim_hits_eb_phi', 
                 'sim_hits_es_detid', 'sim_hits_es_energy',
                 'sim_hits_es_six', 'sim_hits_es_siy', 'sim_hits_es_time',
-                'sim_hits_es_rho', 'sim_hits_es_eta', 'sim_hits_es_phi']
+                'sim_hits_es_rho', 'sim_hits_es_eta', 'sim_hits_es_phi',
+                'sim_hits_hb_detid', 'sim_hits_hb_energy', 
+                'sim_hits_hb_iphi', 'sim_hits_hb_ieta',
+                'sim_hits_he_detid', 'sim_hits_he_energy',
+                'sim_hits_he_iphi', 'sim_hits_he_ieta',
+                'sim_hits_hf_detid', 'sim_hits_hf_energy',
+                'sim_hits_hf_iphi', 'sim_hits_hf_ieta',
+                'sim_hits_ho_detid', 'sim_hits_ho_energy',
+                'sim_hits_ho_iphi', 'sim_hits_ho_ieta']
     
     reco_data = reco_tree.arrays(reco_keys)
     gen_data = gen_tree.arrays(sim_keys + gen_keys)
